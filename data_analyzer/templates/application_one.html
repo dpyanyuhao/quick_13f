@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Select Fund and Time Interval{% endblock %}
+
+{% block content %}
+<style>
+    .sort-asc::after {
+        content: " \2191"; /* Unicode for upwards arrow */
+    }
+
+    .sort-desc::after {
+        content: " \2193"; /* Unicode for downwards arrow */
+    }
+</style>
+
+<h2 class="mt-4">By Fund</h2>
+<form id="fundForm">
+    Select a fund:
+    <select id="cikDropdown">
+        {% for fund in funds %}
+            <option value="{{ fund.cik }}">{{ fund.manager_name }}</option>
+        {% endfor %}
+    </select>
+    <br>
+    Start Date:
+    <select id="startTimeDropdown">
+        <!-- To be populated dynamically -->
+    </select>
+    <br>
+    End Date:
+    <select id="endTimeDropdown">
+        <!-- To be populated dynamically -->
+    </select>
+    <br>
+    <input type="submit" value="Show Data">
+</form>
+
+<!-- Placeholder for the Plotly graph -->
+<div id="plotlyGraph1" class="mt-3"></div>
+
+<!-- Placeholder for the Plotly graph -->
+<div id="plotlyGraph2" class="mt-3"></div>
+
+<div id="resultsTable" class="mt-3">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover">
+            <thead class="thead-dark text-center">
+                <tr>
+                    <th data-sort="stock_name">Stock Name <span></span></th>
+                    <th data-sort="ticker">Ticker <span></span></th>
+                    <th data-sort="value">Value <span></span></th>
+                    <th data-sort="shares">Shares <span></span></th>
+                    <th data-sort="% change in shares">% Change in Shares <span></span></th>
+                    <th data-sort="absolute change in shares">Absolute Change in Shares <span></span></th>
+                    <th data-sort="% of company">% of Company <span></span></th>
+                </tr>
+            </thead>                     
+            <tbody class="text-center">
+                <!-- Data will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+<nav aria-label="Table pagination" class="mt-3">
+    <ul id="pagination" class="pagination">
+        <!-- Pagination items will be inserted here -->
+    </ul>
+ </nav>
+{% endblock %}
+
+{% block scripts %}
+<!-- AJAX script -->
+<script>
+    $(document).ready(function(){
+        let currentPage = 0;
+        let allData = [];
+        let sortOrder = {};
+        const ITEMS_PER_PAGE = 25;
+
+        function paginateArray(data, itemsPerPage) {
+            return data.reduce((acc, item, i) => {
+                const pageIndex = Math.floor(i / itemsPerPage);
+                if (!acc[pageIndex]) {
+                    acc[pageIndex] = [];
+                }
+                acc[pageIndex].push(item);
+                return acc;
+            }, []);
+        }
+
+        function displayPage(pageNumber, paginatedData) {
+            $("#resultsTable tbody").empty();
+
+            paginatedData[pageNumber].forEach(function(stock){
+                let row = `<tr>
+                    <td>${stock.stock_name}</td>
+                    <td>${stock.ticker}</td>
+                    <td>${stock.value}</td>
+                    <td>${stock.shares}</td>
+                    <td>${stock['% change in shares']}</td>
+                    <td>${stock['absolute change in shares']}</td>
+                    <td>${stock['% of company']}</td>
+                </tr>`;
+                $("#resultsTable tbody").append(row);
+            });
+        }
+
+        function paginateAndDisplay(data) {
+            const paginatedData = paginateArray(data, ITEMS_PER_PAGE);
+
+            // Update the pagination component
+            $("#pagination").empty();
+            for (let i = 0; i < paginatedData.length; i++) {
+                const paginationItem = $(`<li class="page-item"><a class="page-link" href="#">${i + 1}</a></li>`);
+                paginationItem.click(function(e) {
+                    e.preventDefault();
+                    currentPage=i;
+                    displayPage(i, paginatedData);
+                });
+                $("#pagination").append(paginationItem);
+            }
+            displayPage(currentPage, paginatedData);
+        }
+
+        $("thead th").click(function() {
+            const sortField = $(this).data('sort');
+            if (!sortOrder[sortField]) {
+                sortOrder[sortField] = 'asc';
+            } else {
+                sortOrder[sortField] = sortOrder[sortField] === 'asc' ? 'desc' : 'asc';
+            }
+
+            $("thead th").removeClass('sort-asc sort-desc');
+            // Add the current sort class to the clicked header
+            $(this).addClass(sortOrder[sortField] === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            allData.sort((a, b) => {
+                if (sortField === '% change in shares') {
+                    const aValue = a[sortField] === "NEW" ? Infinity : parseFloat(a[sortField]);
+                    const bValue = b[sortField] === "NEW" ? Infinity : parseFloat(b[sortField]);
+                    return sortOrder[sortField] === 'asc' ? aValue - bValue : bValue - aValue;
+                } else {
+                    if (a[sortField] > b[sortField]) {
+                        return sortOrder[sortField] === 'asc' ? 1 : -1;
+                    } else if (a[sortField] < b[sortField]) {
+                        return sortOrder[sortField] === 'asc' ? -1 : 1;
+                    } else {
+                        return 0;
+                    }
+                }
+            });
+
+            paginateAndDisplay(allData);
+        });
+
+
+        $("#cikDropdown").change(function(){
+            let selectedCIK = $(this).val();
+
+            $("#startTimeDropdown, #endTimeDropdown").empty();
+
+            $.ajax({
+                url: '/get_time_intervals_by_cik/',
+                data: {
+                    'cik': selectedCIK
+                },
+                success: function(data) {
+                    data.intervals.forEach(function(interval){
+                        let formattedDate = new Date(interval).toISOString().slice(0, 10);
+                        $("#startTimeDropdown, #endTimeDropdown").append('<option value="'+formattedDate+'">'+formattedDate+'</option>');
+                        });
+
+                        $('#endTimeDropdown').val($('#endTimeDropdown option:last').val());
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching time intervals.');
+                }
+            });
+
+            $.ajax({
+                url: '/get_fund_holdings_plot/',
+                data: {
+                    'cik': selectedCIK
+                },
+                success: function(data) {
+                    $("#plotlyGraph1").html(data.plot);
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching the Plotly graph.');
+                }
+            });
+
+            $.ajax({
+                url: '/get_sector_exposure_plot/',
+                data: {
+                    'cik': selectedCIK
+                },
+                success: function(data) {
+                    $("#plotlyGraph2").html(data.plot);
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching the Plotly graph.');
+                }
+            });
+
+        });
+
+        $("#fundForm").submit(function(e){
+            e.preventDefault();
+            currentPage = 0;
+
+            let selectedCIK = $("#cikDropdown").val();
+            let selectedStartTime = $("#startTimeDropdown").val();
+            let selectedEndTime = $("#endTimeDropdown").val();
+
+            // Check if end time is before start time
+            if (Date.parse(selectedStartTime) > Date.parse(selectedEndTime)) {
+                alert("End time cannot be before start time.");
+                return;
+            }
+
+            $.ajax({
+                url: '/get_position_change_table/',
+                data: {
+                    'cik': selectedCIK,
+                    'start_time': selectedStartTime,
+                    'end_time': selectedEndTime
+                },
+                success: function(data) {
+                    allData = data.data;
+                    paginateAndDisplay(allData);
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching position change data.');
+                }
+            });
+        });
+
+        $("#cikDropdown").trigger('change');
+    });
+</script>
+{% endblock %}

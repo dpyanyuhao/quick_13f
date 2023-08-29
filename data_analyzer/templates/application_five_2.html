@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Select Fund and Time Interval{% endblock %}
+
+{% block content %}
+
+<style>
+    /* Hide all table rows initially */
+    .paginated {
+        display: none;
+    }
+</style>
+
+<div id="fundData" data-fundciks='[{% for fund in fund_list %}"{{ fund.cik }}"{% if not forloop.last %},{% endif %}{% endfor %}]'></div>
+
+<h2>Top holdings as of {{ time }} for:</h2>
+<ul>
+    {% for fund in fund_list %}
+        <li>{{ fund.manager_name }}</li>
+    {% endfor %}
+</ul>
+
+<!-- Placeholder for Plotly graph -->
+<div id="NotionalPlot" class="mt-3"></div>
+
+<!-- Placeholder for Plotly graph -->
+<div id="SharesPlot" class="mt-3"></div>
+
+
+<h2>Selected holdings:</h2>
+<ul id="selectedList"></ul>
+<button id="submitSelected">Submit</button>
+
+<table border="1" id="dataTable">
+    <thead>
+        <tr>
+            <th>Select</th>
+            <th>Ticker</th>
+            <th>Name</th>
+            <th>Aggregated Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for holding in holdings %}
+            <tr class="paginated">
+                <td><input type="checkbox" name="selected_holding" value="{{ holding.cusip }}" data-name="{{ holding.cusip__name }}" onclick="toggleSelectedItem(this)"></td>
+                <td>{{ holding.cusip__ticker }}</td>
+                <td>{{ holding.cusip__name }}</td>
+                <td>{{ holding.total_value }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div>
+    <button onclick="changePage(-1)">Previous</button>
+    <button onclick="changePage(1)">Next</button>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- AJAX script -->
+<script>
+
+
+$(document).ready(function() {
+    let currentPage = 1;
+    const rowsPerPage = 20;
+    const rows = document.querySelectorAll("#dataTable .paginated");
+    const totalPages = Math.ceil(rows.length / rowsPerPage);
+    const selectedList = document.getElementById('selectedList');
+    const selectedNames = []; // To display to the user
+    const selectedCusips = []; // To use for processing
+    const fundCIKs = JSON.parse($('#fundData').attr('data-fundciks'));
+
+    function updateTable() {
+        for (let i = 0; i < rows.length; i++) {
+            if (Math.ceil((i + 1) / rowsPerPage) === currentPage) {
+                rows[i].style.display = "table-row";
+            } else {
+                rows[i].style.display = "none";
+            }
+        }
+    }
+
+    function changePage(direction) {
+        if (currentPage + direction > 0 && currentPage + direction <= totalPages) {
+            currentPage += direction;
+            updateTable();
+        }
+    }
+
+    // Function to add or remove items from the selected list
+    window.toggleSelectedItem = function(checkboxElem) {
+        const itemName = checkboxElem.dataset.name;
+        const cusip = checkboxElem.value;
+
+        if (checkboxElem.checked) {
+            if (!selectedCusips.includes(cusip)) {
+                selectedCusips.push(cusip);
+                selectedNames.push(itemName);
+                
+                // Add to the list
+                const li = document.createElement('li');
+                li.dataset.cusip = cusip;  // Store the cusip in the dataset for easy removal
+                li.innerText = itemName;
+                selectedList.appendChild(li);
+            }
+        } else {
+            const index = selectedCusips.indexOf(cusip);
+            if (index > -1) {
+                selectedCusips.splice(index, 1);
+                selectedNames.splice(index, 1);
+                
+                // Remove from the list
+                const liToRemove = document.querySelector(`#selectedList li[data-cusip="${cusip}"]`);
+                if (liToRemove) {
+                    selectedList.removeChild(liToRemove);
+                }
+            }
+        }
+    }
+
+    // Expose changePage to global scope so the buttons can use it
+    window.changePage = changePage;
+
+    $('#submitSelected').on('click', function() {
+        console.log(fundCIKs);
+        console.log(selectedCusips);
+        $.ajax({
+            url: '/get_aggregate_exposure_plot/',
+            data: {
+                'cik[]': fundCIKs, 
+                'cusips[]': selectedCusips
+            },
+            success: function(data) {
+                $("#NotionalPlot").html(data.notionalplot);
+                $("#SharesPlot").html(data.sharesplot);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('An error occurred:', textStatus, errorThrown);
+                alert('An error occurred while fetching the Plotly graph.');
+            }
+        });
+    });
+
+    // Initial display for page 1
+    updateTable();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Select Security and Time Interval{% endblock %}
+
+{% block content %}
+<style>
+    .sort-asc::after {
+        content: " \2191"; /* Unicode for upwards arrow */
+    }
+
+    .sort-desc::after {
+        content: " \2193"; /* Unicode for downwards arrow */
+    }
+</style>
+
+<h2 class="mt-4">By Security:</h2>
+<form id="securityForm">
+    <label for="cusip_dropdown">Select a security by name:</label>
+    <select id="cusip_dropdown">
+        {% for security in securities %}
+            <option value="{{ security.cusip }}" {% if forloop.first %}selected{% endif %}>{{ security.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="ticker_dropdown">Select by ticker:</label>
+    <select id="ticker_dropdown">
+        {% for security in securities|dictsort:"ticker" %}
+            <option value="{{ security.cusip }}">{{ security.ticker }}</option>
+        {% endfor %}
+    </select>
+    <br>
+    <label for="startTimeDropdown">Start Date:</label>
+    <select id="startTimeDropdown">
+        <!-- To be populated dynamically -->
+    </select>
+    <br>
+    <label for="endTimeDropdown">End Date:</label>
+    <select id="endTimeDropdown">
+        <!-- To be populated dynamically -->
+    </select>
+    <br>
+    <input type="submit" value="Show Data">
+</form>
+
+<div class="mt-3">
+    <label for="fundInput">Enter top number of holders:</label>
+    <input type="number" id="fundInput" placeholder="Enter number">
+    <button id="fundSubmit" type="button">Submit</button>
+</div>
+
+<!-- Placeholder for the Plotly graph -->
+<div id="plotlyGraph2" class="mt-3"></div>
+
+<!-- Placeholder for the Plotly graph -->
+<div id="plotlyGraph1" class="mt-3"></div>
+
+<div id="resultsTable" class="mt-3">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover">
+            <thead class="thead-dark text-center">
+                <tr>
+                    <th data-sort="filing_period">Period <span></span></th>
+                    <th data-sort="value">Total Value <span></span></th>
+                    <th data-sort="shares">Total Shares <span></span></th>
+                    <th data-sort="notional">$ Notional Bought/Sold <span></span></th>
+                </tr>
+            </thead>                     
+            <tbody class="text-center">
+                <!-- Data will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+<nav aria-label="Table pagination" class="mt-3">
+    <ul id="pagination" class="pagination">
+        <!-- Pagination items will be inserted here -->
+    </ul>
+ </nav>
+{% endblock %}
+
+{% block scripts %}
+<!-- AJAX script -->
+<script>
+     $(document).ready(function(){
+        let currentPage = 0;
+        let allData = [];
+        let sortOrder = {};
+        const ITEMS_PER_PAGE = 25;
+
+        function paginateArray(data, itemsPerPage) {
+            return data.reduce((acc, item, i) => {
+                const pageIndex = Math.floor(i / itemsPerPage);
+                if (!acc[pageIndex]) {
+                    acc[pageIndex] = [];
+                }
+                acc[pageIndex].push(item);
+                return acc;
+            }, []);
+        }
+
+        function displayPage(pageNumber, paginatedData) {
+            $("#resultsTable tbody").empty();
+
+            paginatedData[pageNumber].forEach(function(period){
+                let formattedNotional = parseFloat(period['notional']).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                let formattedValue = parseFloat(period['value']).toLocaleString('en-US');
+                let formattedShares = parseFloat(period['shares']).toLocaleString('en-US');
+                let row = `<tr>
+                    <td>${period['filing_period']}</td>
+                    <td>${formattedValue}</td>
+                    <td>${formattedShares}</td>
+                    <td>${formattedNotional}</td>
+                </tr>`;
+                $("#resultsTable tbody").append(row);
+            });
+        }
+
+        function paginateAndDisplay(data) {
+            const paginatedData = paginateArray(data, ITEMS_PER_PAGE);
+
+            // Update the pagination component
+            $("#pagination").empty();
+            for (let i = 0; i < paginatedData.length; i++) {
+                const paginationItem = $(`<li class="page-item"><a class="page-link" href="#">${i + 1}</a></li>`);
+                paginationItem.click(function(e) {
+                    e.preventDefault();
+                    currentPage=i;
+                    displayPage(i, paginatedData);
+                });
+                $("#pagination").append(paginationItem);
+            }
+            displayPage(currentPage, paginatedData);
+        }
+
+        
+        $("thead th").click(function() {
+            const sortField = $(this).data('sort');
+            if (!sortOrder[sortField]) {
+                sortOrder[sortField] = 'asc';
+            } else {
+                sortOrder[sortField] = sortOrder[sortField] === 'asc' ? 'desc' : 'asc';
+            }
+
+            $("thead th").removeClass('sort-asc sort-desc');
+            $(this).addClass(sortOrder[sortField] === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            
+            allData.sort((a, b) => {
+                if (sortField === "filing_period") {
+                    let dateA = new Date(a[sortField]);
+                    let dateB = new Date(b[sortField]);
+                    return (dateA - dateB) * (sortOrder[sortField] === 'asc' ? 1 : -1);
+                } else {
+                    if (a[sortField] > b[sortField]) {
+                        return sortOrder[sortField] === 'asc' ? 1 : -1;
+                    } else if (a[sortField] < b[sortField]) {
+                        return sortOrder[sortField] === 'asc' ? -1 : 1;
+                    } else {
+                        return 0;
+                    }
+                }
+            });
+            paginateAndDisplay(allData);
+        });
+
+
+        $("#cusip_dropdown").change(function(){
+            let selectedCusip = $(this).val();
+
+            $("#ticker_dropdown").val(selectedCusip);
+            $("#startTimeDropdown, #endTimeDropdown").empty();
+
+            $.ajax({
+                url: '/get_time_intervals_by_cusip/',
+                data: {
+                    'cusip': selectedCusip
+                },
+                success: function(data) {
+                    data.intervals.forEach(function(interval){
+                        let formattedDate = new Date(interval).toISOString().slice(0, 10);
+                        $("#startTimeDropdown, #endTimeDropdown").append('<option value="'+formattedDate+'">'+formattedDate+'</option>');
+                    });
+
+                    $('#endTimeDropdown').val($('#endTimeDropdown option:last').val());
+                },
+
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching time intervals.');
+                }
+            });
+
+        });
+
+
+        $("#ticker_dropdown").change(function(){
+            let selectedCusip = $(this).val();
+            $("#cusip_dropdown").val(selectedCusip);
+            $("#cusip_dropdown").trigger('change');
+        });
+
+
+        $("#securityForm").submit(function(e){
+            e.preventDefault();
+            currentPage = 0;
+
+            let selectedCusip = $("#cusip_dropdown").val();
+            let selectedStartTime = $("#startTimeDropdown").val();
+            let selectedEndTime = $("#endTimeDropdown").val();
+
+            // Check if end time is before start time
+            if (Date.parse(selectedStartTime) > Date.parse(selectedEndTime)) {
+                alert("End time cannot be before start time.");
+                return;
+            }
+
+            $.ajax({
+                url: '/get_dollar_notional_plot/',
+                data: {
+                    'cusip': selectedCusip,
+                    'start_time': selectedStartTime,
+                    'end_time': selectedEndTime
+                },
+                success: function(data) {
+                    $("#plotlyGraph1").html(data.plot);
+                    allData = data.chart_data;
+                    paginateAndDisplay(allData);
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching position change data.');
+                }
+            });
+        });
+
+        $("#fundSubmit").click(function(e){
+            e.preventDefault();
+            
+            let selectedCusip = $("#cusip_dropdown").val();
+            let numberOfFunds = $("#fundInput").val();
+
+            // Check if a CUSIP value is selected
+            if (!selectedCusip) {
+                alert("Please select a security using the dropdown menu.");
+                return;
+            }
+            
+            // Input validation (assuming the user must input at least one holding)
+            if (!numberOfFunds || numberOfFunds < 1) {
+                alert("Please enter a valid number for holdings.");
+                return;
+            }
+
+            $.ajax({
+                url: '/get_top_holders_plot/',
+                data: {
+                    'cusip': selectedCusip,
+                    'num_of_funds': numberOfFunds
+                },
+                success: function(data) {
+                    $("#plotlyGraph2").html(data.plot);
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching holdings distribution.');
+                }
+            });
+        });
+
+        $("#cusip_dropdown").trigger('change');
+    });
+</script>
+{% endblock %}

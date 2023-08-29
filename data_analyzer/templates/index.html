@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome to the webpage{% endblock %}
+
+{% load static %}
+
+{% block content %}
+<br>
+<div class="jumbotron text-center" style="background-image: url('{% static "img/background.png" %}'); background-size: cover;">
+    <h1 class="display-4" style="color: white; font-weight: bold;">Welcome to Quick 13F!</h1>
+    <p class="lead" style="color: white; font-weight: bold;">Generate dynamic reports and gather insights</p>
+</div>
+<br>
+<div class="major container">
+  <div class="container">
+    <!-- Three columns of text below the carousel -->
+    <div class="row">
+      <div class="col-lg-4">
+        <img src="{% static 'img/fund.png' %}" alt="Fund Image" class="rounded-circle" width="140" height="140">
+        <h2>By Fund</h2>
+        <p>Look at the evolution of holdings and change in positions of a fund over time.</p>
+        <p><a class="btn btn-secondary" href="{% url 'application_one' %}" role="button">View Report &raquo;</a></p>
+      </div><!-- /.col-lg-4 -->
+      <div class="col-lg-4">
+        <img src="{% static 'img/security.png' %}" alt="Security Image" class="rounded-circle" width="140" height="140">
+        <h2>By Security</h2>
+        <p>Look at the top holders of a security over time and the notional bought/sold.</p>
+        <p><a class="btn btn-secondary" href="{% url 'application_two' %}" role="button">View Report &raquo;</a></p>
+      </div><!-- /.col-lg-4 -->
+      <div class="col-lg-4">
+        <img src="{% static 'img/topholdings.png' %}" alt="Holdings Image" class="rounded-circle" width="140" height="140">
+        <h2>By Top Holdings</h2>
+        <p>Look at the aggregate top holdings of all funds and the most owned securities over time.</p>
+        <p><a class="btn btn-secondary" href="{% url 'application_three' %}" role="button">View Report &raquo;</a></p>
+      </div><!-- /.col-lg-4 -->
+    </div><!-- /.row -->
+  </div><!-- /.container -->
+
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-4 offset-lg-2">
+        <img src="{% static 'img/mostbought.png' %}" alt="Bought Image" class="rounded-circle" width="140" height="140">
+        <h2>By Most Bought/Sold</h2>
+        <p>Look at the most bought and sold securities in a given period.</p>
+        <p><a class="btn btn-secondary" href="{% url 'application_four' %}" role="button">View Report &raquo;</a></p>
+      </div><!-- /.col-lg-4 -->
+      <div class="col-lg-4">
+        <img src="{% static 'img/capital.png' %}" alt="Capital Image" class="rounded-circle" width="140" height="140">
+        <h2>By Capital Deployed</h2>
+        <p>Select fund managers by capital deployed and generate their aggregate exposure to certain securities.</p>
+        <p><a class="btn btn-secondary" href="{% url 'application_five' %}" role="button">View Report &raquo;</a></p>
+      </div><!-- /.col-lg-4 -->
+    </div><!-- /.row -->
+  </div><!-- /.container -->
+</div>
+{% endblock %}

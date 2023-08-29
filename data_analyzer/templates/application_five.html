@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Application 5 Get Period{% endblock %}
+
+{% block content %}
+<h2 class="mt-4">By Capital Deployed:</h2>
+<form action="/application_five_2/" method="post" id="fundForm">
+    {% csrf_token %}
+
+    <div class="mt-3">
+        <label for="time">Time Period:</label>
+        <select id="time" name="selectedTime">
+            {% for interval in intervals %}
+            <option value="{{ interval|date:"Y-m-d" }}" {% if forloop.last %}selected{% endif %}>{{ interval }}</option>
+            {% endfor %}
+        </select>
+        <button id="timePeriodSubmit" type="button">Submit</button>
+    </div>
+
+    <!-- Display the selected funds -->
+    <div id="selectedFunds">
+        <h3>Selected Funds:</h3>
+        <ul id="selectedFundsList"></ul>
+        <button type="submit">Submit Selected Funds</button>
+    </div>
+
+    <!-- Insert paginated content here -->
+    <div id="sortedfundContent"></div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<!-- AJAX script -->
+<script>
+$(document).ready(function() {
+    let currentFundPage = 1;
+
+    $("#timePeriodSubmit").click(function(e) {
+        e.preventDefault();
+        let selectedTime = $("#time").val();
+        fetchData(selectedTime, currentFundPage);
+    });
+
+    // Handle pagination clicks
+    $('#sortedfundContent').on('click', '.pagination a', function(e) {
+        e.preventDefault();
+        let selectedTime = $("#time").val();
+        let pageToFetch = $(this).data('page');
+        fetchData(selectedTime, pageToFetch);
+    });
+
+    // Checkbox change listener to update selected funds list and hidden inputs
+    $('#sortedfundContent').on('change', '.select-manager-checkbox', function() {
+        let cik = $(this).data('cik');
+        let managerName = $(this).data('name');
+
+        if ($(this).prop('checked')) {
+            $('#selectedFundsList').append(`<li data-cik="${cik}">${managerName}</li>`);
+            $('#fundForm').append(`<input type="hidden" name="fund_list" value="${cik}">`);
+        } else {
+            $('#selectedFundsList').find(`li[data-cik="${cik}"]`).remove();
+            $('#fundForm').find(`input[value="${cik}"]`).remove();
+        }
+    });
+
+    function fetchData(selectedTime, page) {
+        $.ajax({
+            url: '/get_sorted_fund_manager/',
+            data: {
+                'time': selectedTime,
+                'page': page
+            },
+            dataType: 'json',
+            success: function(response) {
+                let managerHtml = '<table><thead><tr><th>Select</th><th>Manager Name</th></tr></thead><tbody>';
+                response.data.forEach(fund => {
+                    managerHtml += `
+                        <tr>
+                            <td>
+                                <input type="checkbox" class="select-manager-checkbox" data-cik="${fund.cik}" data-name="${fund.manager_name}">
+                            </td>
+                            <td>${fund.manager_name}</td>
+                        </tr>
+                    `;
+                });
+                managerHtml += '</tbody></table>';
+
+                let paginationHtml = '<div class="pagination"><span class="step-links">';
+                if (response.has_previous) {
+                    paginationHtml += `<a href="#" data-page="${response.page_number - 1}">previous</a>`;
+                }
+                paginationHtml += `Page ${response.page_number} of ${response.num_pages}.`;
+                if (response.has_next) {
+                    paginationHtml += `<a href="#" data-page="${response.page_number + 1}">next</a>`;
+                }
+                paginationHtml += '</span></div>';
+
+                $('#sortedfundContent').html(managerHtml + paginationHtml);
+                
+                // Check checkboxes of already selected funds
+                $('.select-manager-checkbox').each(function() {
+                    let cik = $(this).data('cik');
+                    if ($('#selectedFundsList').find(`li[data-cik="${cik}"]`).length > 0) {
+                        $(this).prop('checked', true);
+                    }
+                });
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('An error occurred:', textStatus, errorThrown);
+                alert('An error occurred while fetching the sorted fund manager data.');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

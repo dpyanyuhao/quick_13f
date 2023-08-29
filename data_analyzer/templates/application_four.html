@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Select Time Period and Number of Securities:{% endblock %}
+
+{% block content %}
+<h2 class="mt-4">By Most Bought/Sold:</h2>
+<div class="mt-3">
+    <label for="time">Time Period:</label>
+    <select id="time">
+        {% for interval in intervals %}
+        {% if forloop.first %}
+        <option value="{{ interval|date:"Y-m-d" }}" disabled>{{ interval }}</option>
+        {% else %}
+        <option value="{{ interval|date:"Y-m-d" }}">{{ interval }}</option>
+        {% endif %}
+        {% endfor %}
+    </select>
+    <label for="quantity">Enter number of securities:</label>
+    <input type="number" id="quantity" placeholder="Enter number">
+    <button id="topSecuritiesSubmit" type="button">Submit</button>
+</div>
+
+<!-- Placeholder to display previous_date -->
+<div id="previous-date-display" class="mt-3"></div>
+
+<!-- Largest change in shares table -->
+<h3 class="mt-3">Most bought stocks</h3>
+<div id="resultsTableLargest" class="mt-3">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover">
+            <thead class="thead-dark text-center">
+                <tr>
+                    <th>Name</th>
+                    <th>Ticker</th>
+                    <th>Aggregate Value</th>
+                    <th>Aggregate Shares</th>
+                    <th>Change in Shares</th>
+                </tr>
+            </thead>
+            <tbody class="text-center">
+                <!-- Data for largest changes will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<nav aria-label="Table pagination for Largest" class="mt-3">
+    <ul id="paginationLargest" class="pagination">
+        <!-- Pagination items for largest change table will be inserted here -->
+    </ul>
+</nav>
+
+<!-- Smallest change in shares table -->
+<h3 class="mt-3">Most sold stocks</h3>
+<div id="resultsTableSmallest" class="mt-3">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover">
+            <thead class="thead-dark text-center">
+                <tr>
+                    <th>Name</th>
+                    <th>Ticker</th>
+                    <th>Aggregate Value</th>
+                    <th>Aggregate Shares</th>
+                    <th>Change in Shares</th>
+                </tr>
+            </thead>
+            <tbody class="text-center">
+                <!-- Data for smallest changes will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<nav aria-label="Table pagination for Smallest" class="mt-3">
+    <ul id="paginationSmallest" class="pagination">
+        <!-- Pagination items for smallest change table will be inserted here -->
+    </ul>
+</nav>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function(){
+        let currentPageLargest = 0;
+        let currentPageSmallest = 0;
+        let allDataLargest = [];
+        let allDataSmallest = [];
+        const ITEMS_PER_PAGE = 10;
+
+        function paginateArray(data, itemsPerPage) {
+            return data.reduce((acc, item, i) => {
+                const pageIndex = Math.floor(i / itemsPerPage);
+                if (!acc[pageIndex]) {
+                    acc[pageIndex] = [];
+                }
+                acc[pageIndex].push(item);
+                return acc;
+            }, []);
+        }
+
+        function displayPage(pageNumber, paginatedData, tableBodySelector, paginationSelector) {
+            $(tableBodySelector).empty();
+
+            paginatedData[pageNumber].forEach(function(stock){
+                let row = `<tr>
+                    <td>${stock.stock_name}</td>
+                    <td>${stock.ticker}</td>
+                    <td>${stock.total_value}</td>
+                    <td>${stock.total_shares}</td>
+                    <td>${stock.change_in_shares}</td>
+                </tr>`;
+                $(tableBodySelector).append(row);
+            });
+
+            // Update the pagination component
+            $(paginationSelector).empty();
+            for (let i = 0; i < paginatedData.length; i++) {
+                const paginationItem = $(`<li class="page-item"><a class="page-link" href="#">${i + 1}</a></li>`);
+                paginationItem.click(function(e) {
+                    e.preventDefault();
+                    displayPage(i, paginatedData, tableBodySelector, paginationSelector);
+                });
+                $(paginationSelector).append(paginationItem);
+            }
+        }
+
+        $("#topSecuritiesSubmit").click(function() {
+            let selectedTime = $("#time").val();
+            let numberOfSecurities = $("#quantity").val();
+
+            $.ajax({
+                url: '/get_most_traded_securities_by_quarter/',
+                data: {
+                    'num_of_funds': numberOfSecurities,
+                    'time': selectedTime,
+                },
+                success: function(data) {
+                    $('#previous-date-display').text("As of: " + data.time);
+                    allDataLargest = data.table1_data;
+                    allDataSmallest = data.table2_data;
+
+                    const paginatedDataLargest = paginateArray(allDataLargest, ITEMS_PER_PAGE);
+                    const paginatedDataSmallest = paginateArray(allDataSmallest, ITEMS_PER_PAGE);
+
+                    displayPage(currentPageLargest, paginatedDataLargest, "#resultsTableLargest tbody", "#paginationLargest");
+                    displayPage(currentPageSmallest, paginatedDataSmallest, "#resultsTableSmallest tbody", "#paginationSmallest");
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('An error occurred:', textStatus, errorThrown);
+                    alert('An error occurred while fetching securities.');
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+
