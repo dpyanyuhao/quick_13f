@@ -230,6 +230,30 @@ if __name__ == "__main__":
         
         print(f"{quarter} completed.")
 
+    cursor.execute("""
+    ALTER TABLE security_stats
+    ADD COLUMN id CHAR(19) DEFAULT NULL AFTER total_count
+    """)
+    connection.commit()
+
+    cursor.execute("""
+    ALTER TABLE fund_stats
+    ADD COLUMN id CHAR(19) DEFAULT NULL AFTER funds_deployed
+    """)
+    connection.commit()
+
+    cursor.execute("""
+    UPDATE fund_stats
+    SET id = CONCAT(cik, DATE_FORMAT(filing_period, '%Y%m%d'))
+    """)
+    connection.commit()
+
+    cursor.execute("""
+    UPDATE security_stats
+    SET id = CONCAT(cusip, DATE_FORMAT(filing_period, '%Y%m%d'))
+    """)
+    connection.commit()
+
     # Close the cursor and the connection
     cursor.close()
     connection.close()
