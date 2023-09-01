@@ -517,8 +517,8 @@ def get_aggregate_exposure_plot(request):
     )
 
     fig.update_layout(
-        xaxis_title="Total Value",
-        yaxis_title="Filing Period",
+        xaxis_title="Filing Period",
+        yaxis_title="Aggregate Value",
         legend_title_text="Fund Name"
         )
     
@@ -543,8 +543,8 @@ def get_aggregate_exposure_plot(request):
     )
 
     fig2.update_layout(
-        xaxis_title="Total Shares",
-        yaxis_title="Filing Period",
+        xaxis_title="Filing Period",
+        yaxis_title="Aggregate Shares",
         legend_title_text="Fund Name"
         )
     
